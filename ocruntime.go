@@ -46,18 +46,24 @@ var (
 
 // Start starts an infinite loop that
 // profiles the process and reports the views
-func Start(ctx context.Context, dur time.Duration) {
+func Start(ctx context.Context, dur time.Duration) (close func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	go start(ctx, dur)
+	return cancel
+}
+
+func start(ctx context.Context, dur time.Duration) {
 	if dur < time.Second {
 		dur = time.Second
 	}
-
+	ticker := time.NewTicker(dur)
 	for {
 		select {
+		case <-ticker.C:
 		case <-ctx.Done():
+			ticker.Stop()
 			return
-		default:
 		}
-
 		var ms runtime.MemStats
 		runtime.ReadMemStats(&ms)
 		stats.Record(
@@ -65,8 +71,7 @@ func Start(ctx context.Context, dur time.Duration) {
 			grM.M(int64(runtime.NumGoroutine())),
 			haM.M(int64(ms.HeapAlloc)),
 			hsM.M(int64(ms.Sys)),
-			pnsM.M(int64(ms.PauseNs[ms.NumGC+255]%256)),
+			pnsM.M(int64(ms.PauseNs[(ms.NumGC+255)%256])),
 		)
-		time.Sleep(time.Second * 5)
 	}
 }
